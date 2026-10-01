@@ -77,3 +77,10 @@ ath9k_htc-y +=	htc_hst.o \
 ath9k_htc-$(CONFIG_ATH9K_HTC_DEBUGFS) += htc_drv_debug.o
 
 obj-$(CONFIG_ATH9K_HTC) += ath9k_htc.o
+
+# ath9k_htc built into the kernel clashes with the (built-in) Qualcomm WLAN HTC
+# layer (qca-wifi-host-cmn/htc) which exports htc_start/htc_stop/htc_connect_service.
+# Give the ath9k_htc versions unique names so both can be linked into vmlinux.
+ccflags-$(CONFIG_ATH9K_HTC) += -Dhtc_start=ath9k_htc_start \
+			       -Dhtc_stop=ath9k_htc_stop \
+			       -Dhtc_connect_service=ath9k_htc_connect_service
