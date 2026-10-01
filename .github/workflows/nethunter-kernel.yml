@@ -1,0 +1,112 @@
+name: Build NetHunter Wi-Fi kernel (Redmi Note 9S / curtana)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'arena/**'
+
+permissions:
+  contents: write   # needed to publish the zip as a GitHub Release
+
+env:
+  DEFCONFIG: LawRun_defconfig
+  ANYKERNEL_REPO: https://github.com/osm0sis/AnyKernel3
+  ANYKERNEL_REF: 020dfeccf9d7e962a48400fc94d3e451df92eead
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev libelf-dev cpio zip unzip lz4 xz-utils \
+            python3 device-tree-compiler ccache rsync git curl
+
+      - name: Fetch Proton Clang toolchain
+        run: |
+          git clone -q --depth=1 https://github.com/kdrag0n/proton-clang "$HOME/proton"
+          # Appended (not prepended): Proton's old host ld/as would break host tools.
+          echo "$HOME/proton/bin" >> "$GITHUB_PATH"
+          "$HOME/proton/bin/clang" --version | head -1
+
+      - name: Configure kernel (LawRun defconfig + nethunter.config)
+        run: |
+          mkdir -p out
+          make O=out ARCH=arm64 "$DEFCONFIG" nethunter.config
+          scripts/nethunter/fetch-firmware.sh . out/.config
+          make O=out ARCH=arm64 olddefconfig
+
+      - name: Verify the Wi-Fi drivers are enabled
+        run: |
+          missing=0
+          for o in MAC80211 CFG80211_WEXT ATH9K_HTC ATH9K_HW RT2800USB RT2X00 RT73USB RT2500USB \
+                   RTL8187 RTL8XXXU 88XXAU MT7601U CARL9170 FW_LOADER; do
+            if ! grep -q "^CONFIG_$o=y" out/.config; then echo "MISSING: CONFIG_$o"; missing=1; fi
+          done
+          [ $missing = 0 ] || exit 1
+          grep -E "^CONFIG_(MAC80211|ATH9K_HTC|RT2800USB|RT2800USB_RT3[35]|RT2800USB_RT5|88XXAU|RTL8XXXU|EXTRA_FIRMWARE)" out/.config
+
+      - name: Build Image.gz-dtb and dtbo.img
+        run: |
+          set -o pipefail
+          make -j"$(nproc)" O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar AS=llvm-as NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            Image.gz-dtb dtbo.img 2>&1 | tee build.log
+          ls -l out/arch/arm64/boot/Image.gz-dtb out/arch/arm64/boot/dtbo.img
+
+      - name: Package flashable AnyKernel3 zip
+        id: pack
+        run: |
+          git clone -q "$ANYKERNEL_REPO" AnyKernel3
+          git -C AnyKernel3 checkout -q "$ANYKERNEL_REF"
+          cp scripts/nethunter/anykernel.sh AnyKernel3/anykernel.sh
+          cp out/arch/arm64/boot/Image.gz-dtb out/arch/arm64/boot/dtbo.img AnyKernel3/
+          NAME="LawRun-NetHunter-WiFi-curtana-$(date -u +%Y%m%d)-${GITHUB_SHA::7}.zip"
+          (cd AnyKernel3 && zip -r9 "../$NAME" . -x '.git*' 'README.md' '*placeholder' '.github/*')
+          cp out/.config kernel-config.txt
+          sha256sum "$NAME" | tee "$NAME.sha256"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.name }}
+          path: |
+            ${{ steps.pack.outputs.name }}
+            ${{ steps.pack.outputs.name }}.sha256
+            kernel-config.txt
+            build.log
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="nethunter-curtana-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            "${{ steps.pack.outputs.name }}" "${{ steps.pack.outputs.name }}.sha256" kernel-config.txt \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "NetHunter Wi-Fi kernel for curtana (build ${GITHUB_RUN_NUMBER})" \
+            --notes "Flashable AnyKernel3 zip (boot + dtbo). Built from ${GITHUB_SHA} with ${DEFCONFIG} + nethunter.config. Untested on-device - back up your boot/dtbo first."
+
+      - name: Upload log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-failed
+          path: build.log
+          if-no-files-found: ignore

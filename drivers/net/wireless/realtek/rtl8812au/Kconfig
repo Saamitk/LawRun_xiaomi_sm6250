@@ -1,0 +1,14 @@
+config 88XXAU
+	tristate "Realtek 8812AU/8821AU/8814AU USB WiFi (aircrack-ng driver, monitor mode + injection)"
+	depends on USB && CFG80211
+	select WIRELESS_EXT
+	select WEXT_PRIV
+	help
+	  Out-of-tree aircrack-ng rtl8812au driver (v5.6.4.2 branch) that
+	  supports RTL8812AU, RTL8821AU and RTL8814AU USB adapters, including
+	  monitor mode and packet injection.
+
+	  Source: https://github.com/aircrack-ng/rtl8812au
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called 88XXau.

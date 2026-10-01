@@ -227,6 +227,6 @@ source "drivers/sensors/Kconfig"
 
 source "drivers/esoc/Kconfig"
 
-source "drivers/kernelsu/Kconfig"
+# KernelSU: drivers/kernelsu is a dangling symlink in this tree, so its Kconfig is not sourced.
 
 endmenu

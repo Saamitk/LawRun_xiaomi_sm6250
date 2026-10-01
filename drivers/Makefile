@@ -193,4 +193,4 @@ obj-$(CONFIG_ESOC)              += esoc/
 obj-$(CONFIG_GNSS_SIRF)		+= gnsssirf/
 obj-$(CONFIG_GNSS)		+= gnss/
 
-obj-y += kernelsu/
+# obj-$(CONFIG_KSU) += kernelsu/   # KernelSU sources are not bundled
