@@ -103,6 +103,13 @@ jobs:
             --title "NetHunter Wi-Fi kernel for curtana (build ${GITHUB_RUN_NUMBER})" \
             --notes "Flashable AnyKernel3 zip (boot + dtbo). Built from ${GITHUB_SHA} with ${DEFCONFIG} + nethunter.config. Untested on-device - back up your boot/dtbo first."
 
+      - name: Surface compiler errors as annotations
+        if: failure()
+        run: |
+          [ -f build.log ] || exit 0
+          grep -n -E "error:|Error [0-9]+$|\*\*\*|undefined reference|ld.lld: error|No rule to make target" build.log \
+            | head -n 10 | cut -c1-400 | while IFS= read -r l; do echo "::error title=build::${l}"; done
+
       - name: Upload log on failure
         if: failure()
         uses: actions/upload-artifact@v4
