@@ -5,19 +5,19 @@ EXTRA_CFLAGS += -Wno-unused-variable
 EXTRA_CFLAGS += -Wno-unused-label
 #EXTRA_CFLAGS += -Wno-unused-parameter
 EXTRA_CFLAGS += -Wno-unused-function
-EXTRA_CFLAGS += -Wno-implicit-fallthrough
-EXTRA_CFLAGS += -Wno-cast-function-type
-EXTRA_CFLAGS += -Wno-missing-declarations
-EXTRA_CFLAGS += -Wno-missing-prototypes
+EXTRA_CFLAGS += $(call cc-disable-warning, implicit-fallthrough)
+EXTRA_CFLAGS += $(call cc-disable-warning, cast-function-type)
+EXTRA_CFLAGS += $(call cc-disable-warning, missing-declarations)
+EXTRA_CFLAGS += $(call cc-disable-warning, missing-prototypes)
 #EXTRA_CFLAGS += -Wno-error=cast-function-type
 #EXTRA_CFLAGS += -Wno-parentheses-equality
 #EXTRA_CFLAGS += -Wno-error=incompatible-pointer-types
-EXTRA_CFLAGS += -Wno-stringop-overread
+EXTRA_CFLAGS += $(call cc-disable-warning, stringop-overread)
 #EXTRA_CFLAGS += -Wno-pointer-bool-conversion
 EXTRA_CFLAGS += -Wno-unknown-pragmas
 #EXTRA_CFLAGS += -Wno-unused
-EXTRA_CFLAGS += -Wno-address
-EXTRA_CFLAGS += -Wno-vla -g
+EXTRA_CFLAGS += $(call cc-disable-warning, address)
+EXTRA_CFLAGS += $(call cc-disable-warning, vla)
 
 EXTRA_CFLAGS += -I$(src)/include -I$(srctree)/$(src)/include
 EXTRA_CFLAGS += -I$(src)/hal/phydm -I$(srctree)/$(src)/hal/phydm

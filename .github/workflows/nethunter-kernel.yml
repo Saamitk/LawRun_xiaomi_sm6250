@@ -35,6 +35,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             bc bison flex libssl-dev libelf-dev cpio zip unzip lz4 xz-utils \
             python3 device-tree-compiler ccache rsync git curl
+          # the tree's dtbo.img rule calls "python2 mkdtboimg.py" (works with python3)
+          sudo ln -sf /usr/bin/python3 /usr/local/bin/python2
 
       - name: Fetch Proton Clang toolchain
         run: |
@@ -60,13 +62,28 @@ jobs:
           [ $missing = 0 ] || exit 1
           grep -E "^CONFIG_(MAC80211|ATH9K_HTC|RT2800USB|RT2800USB_RT3[35]|RT2800USB_RT5|88XXAU|RTL8XXXU|EXTRA_FIRMWARE)" out/.config
 
+      - name: Quick compile check of the Wi-Fi code (mac80211 + drivers)
+        run: |
+          make -j"$(nproc)" O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar AS=llvm-as NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            -k prepare scripts 2>&1 | tee precheck.log || true
+          make -j"$(nproc)" O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar AS=llvm-as NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            -k net/mac80211/ drivers/net/wireless/ 2>&1 | tee -a precheck.log || true
+          if grep -qE "error:|\*\*\*" precheck.log; then
+            scripts/nethunter/ci-errors.sh precheck.log
+            exit 1
+          fi
+
       - name: Build Image.gz-dtb and dtbo.img
         run: |
           set -o pipefail
           make -j"$(nproc)" O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar AS=llvm-as NM=llvm-nm \
             OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
             CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            Image.gz-dtb dtbo.img 2>&1 | tee build.log
+            -k Image.gz-dtb dtbo.img 2>&1 | tee build.log
           ls -l out/arch/arm64/boot/Image.gz-dtb out/arch/arm64/boot/dtbo.img
 
       - name: Package flashable AnyKernel3 zip
@@ -106,14 +123,14 @@ jobs:
       - name: Surface compiler errors as annotations
         if: failure()
         run: |
-          [ -f build.log ] || exit 0
-          grep -n -E "error:|Error [0-9]+$|\*\*\*|undefined reference|ld.lld: error|No rule to make target" build.log \
-            | head -n 10 | cut -c1-400 | while IFS= read -r l; do echo "::error title=build::${l}"; done
+          scripts/nethunter/ci-errors.sh build.log
 
       - name: Upload log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-log-failed
-          path: build.log
+          path: |
+            build.log
+            precheck.log
           if-no-files-found: ignore
